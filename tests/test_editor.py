@@ -25,7 +25,7 @@ class EditorRoutingTests(unittest.TestCase):
             command.write_text(contents)
             command.chmod(0o755)
 
-    def check_route(self, projects, target, editor, exit_code=0, suffix="", expected_args=None):
+    def check_route(self, projects, target, editor, exit_code=0, suffix="", expected_args=None, wait=False):
         project_paths = [self.root / project for project in projects]
         for project in project_paths:
             project.mkdir(parents=True, exist_ok=True)
@@ -39,7 +39,7 @@ class EditorRoutingTests(unittest.TestCase):
             TEST_EXIT=str(exit_code),
         )
         result = subprocess.run(
-            ["/bin/bash", str(SCRIPT), str(target_path) + suffix],
+            ["/bin/bash", str(SCRIPT), *(["--wait"] if wait else []), str(target_path) + suffix],
             env=env, text=True, capture_output=True,
         )
         self.assertEqual(result.returncode, exit_code, result.stderr)
@@ -47,7 +47,22 @@ class EditorRoutingTests(unittest.TestCase):
             expected_args = [str(target_path.resolve())]
         else:
             expected_args = [arg.replace("{path}", str(target_path.resolve())) for arg in expected_args]
-        self.assertEqual(result.stdout.splitlines(), [editor, "--wait", *expected_args])
+        self.assertEqual(result.stdout.splitlines(), [editor, *(["--wait"] if wait else []), *expected_args])
+
+    def test_optional_wait(self):
+        for editor, projects in [("xed", ["App/App.xcodeproj"]), ("code", [])]:
+            for suffix in ["", ":42", ":42:5"]:
+                with self.subTest(editor=editor, suffix=suffix):
+                    if not suffix:
+                        expected = ["{path}"]
+                    elif editor == "xed":
+                        expected = ["--line", "42", "{path}"]
+                    else:
+                        expected = ["--goto", "{path}" + suffix]
+                    self.check_route(
+                        projects, "App/main.cpp", editor, suffix=suffix,
+                        expected_args=expected, wait=True,
+                    )
 
     def test_editor_command_line_and_column(self):
         for editor, projects, expected in [

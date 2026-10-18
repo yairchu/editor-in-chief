@@ -1,11 +1,18 @@
 #!/bin/bash
 
+wait_args=()
+if [[ "$1" == "--wait" ]]; then
+    wait_args=(--wait)
+    shift
+fi
+
 if [ "$1" == "" ] || [ "$1" == "--help" ]; then
-    echo "Usage: $0 <file>[:line[:column]]"
+    echo "Usage: $0 [--wait] <file>[:line[:column]]"
     echo
     echo "editor-in-chief.sh opens the file in Xcode if it is in an open Xcode project,"
     echo "otherwise it opens the file in Visual Studio Code."
     echo "Xcode supports line selection; Visual Studio Code supports line and column."
+    echo "Use --wait to wait until the file is closed before returning."
     exit 1
 fi
 
@@ -56,15 +63,15 @@ while IFS= read -r proj_file; do
 
     if [[ "$abs_file_path" == "$proj_dir/"* ]]; then
         if [[ -n "$line" ]]; then
-            exec xed --wait --line "$line" "$abs_file_path"
+            exec xed "${wait_args[@]}" --line "$line" "$abs_file_path"
         fi
-        exec xed --wait "$abs_file_path"
+        exec xed "${wait_args[@]}" "$abs_file_path"
     fi
 done <<< "$open_xcode_projects"
 
 if [[ -n "$line" ]]; then
     position="$abs_file_path:$line"
     [[ -z "$column" ]] || position="$position:$column"
-    exec code --wait --goto "$position"
+    exec code "${wait_args[@]}" --goto "$position"
 fi
-exec code --wait "$abs_file_path"
+exec code "${wait_args[@]}" "$abs_file_path"
