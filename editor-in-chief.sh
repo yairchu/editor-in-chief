@@ -1,15 +1,29 @@
 #!/bin/bash
 
 if [ "$1" == "" ] || [ "$1" == "--help" ]; then
-    echo "Usage: $0 <file>"
+    echo "Usage: $0 <file>[:line[:column]]"
     echo
     echo "editor-in-chief.sh opens the file in Xcode if it is in an open Xcode project,"
     echo "otherwise it opens the file in Visual Studio Code."
+    echo "Xcode supports line selection; Visual Studio Code supports line and column."
     exit 1
 fi
 
 file="$1"
-abs_file_path=$(realpath "$file")
+line=""
+column=""
+# Prefer a literal existing filename when its suffix looks like a position.
+if [[ ! -e "$file" ]]; then
+    if [[ "$file" =~ ^(.+):([0-9]+):([0-9]+)$ ]]; then
+        file="${BASH_REMATCH[1]}"
+        line="${BASH_REMATCH[2]}"
+        column="${BASH_REMATCH[3]}"
+    elif [[ "$file" =~ ^(.+):([0-9]+)$ ]]; then
+        file="${BASH_REMATCH[1]}"
+        line="${BASH_REMATCH[2]}"
+    fi
+fi
+abs_file_path=$(realpath "$file") || exit 1
 
 open_xcode_projects=$( osascript -e '
 tell application "Xcode"
@@ -19,12 +33,13 @@ tell application "Xcode"
             set end of res to path of document of w
         end try
     end repeat
-    return res
+    set text item delimiters of AppleScript to linefeed
+    return res as text
 end tell
 ')
-echo "open_xcode_projects: $open_xcode_projects"
 
-for proj_file in $open_xcode_projects; do
+while IFS= read -r proj_file; do
+    [[ -n "$proj_file" ]] || continue
     proj_dir=$(dirname "$proj_file")
     if [[ $(basename "$proj_dir") == "build" ]]; then
         # Probably a cmake build directory
@@ -32,17 +47,24 @@ for proj_file in $open_xcode_projects; do
     elif [[ $(basename "$proj_dir") == "MacOSX" ]]; then
         # Looks like a JUCE projucer generated project
         parent_dir=$(dirname "$proj_dir")
-        if [[ $(basename "$proj_dir") == "Builds" ]]; then
+        if [[ $(basename "$parent_dir") == "Builds" ]]; then
             # Yep, it's a JUCE projucer project
             proj_dir=$(dirname "$parent_dir")
         fi
     fi
-    echo "xcode project folder: $proj_dir"
+    proj_dir=$(cd "$proj_dir" && pwd -P) || continue
 
-    if [[ "$abs_file_path" == "$proj_dir"* ]]; then
-        xed "$abs_file_path"
-        exit 0
+    if [[ "$abs_file_path" == "$proj_dir/"* ]]; then
+        if [[ -n "$line" ]]; then
+            exec xed --wait --line "$line" "$abs_file_path"
+        fi
+        exec xed --wait "$abs_file_path"
     fi
-done
+done <<< "$open_xcode_projects"
 
-code "$abs_file_path"
+if [[ -n "$line" ]]; then
+    position="$abs_file_path:$line"
+    [[ -z "$column" ]] || position="$position:$column"
+    exec code --wait --goto "$position"
+fi
+exec code --wait "$abs_file_path"
