@@ -53,6 +53,13 @@ editor-in-chief path/to/file.cpp:42:5
 
 The script accepts `file`, `file:line`, and `file:line:column`, including the
 format passed by the Rust `editor-command` crate's `Editor::open_at` method.
+It also accepts the vi/emacs-style `+line` or `+line:column` argument before the
+file, as passed by tools such as `git-mediate`:
+
+```sh
+editor-in-chief +42 path/to/file.cpp
+```
+
 It selects the line in Xcode, or the line and column in VS Code. By default,
 the script returns after opening the file. Pass `--wait` before the file argument
 to wait until the file is closed:

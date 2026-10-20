@@ -1,13 +1,23 @@
 #!/bin/bash
 
 wait_args=()
-if [[ "$1" == "--wait" ]]; then
-    wait_args=(--wait)
+line=""
+column=""
+while [[ $# -gt 1 ]]; do
+    if [[ "$1" == "--wait" ]]; then
+        wait_args=(--wait)
+    elif [[ "$1" =~ ^\+([0-9]+)(:([0-9]+))?$ ]]; then
+        # Position in the vi/emacs style: +line or +line:column
+        line="${BASH_REMATCH[1]}"
+        column="${BASH_REMATCH[3]}"
+    else
+        break
+    fi
     shift
-fi
+done
 
 if [ "$1" == "" ] || [ "$1" == "--help" ]; then
-    echo "Usage: $0 [--wait] <file>[:line[:column]]"
+    echo "Usage: $0 [--wait] [+line[:column]] <file>[:line[:column]]"
     echo
     echo "editor-in-chief.sh opens the file in Xcode if it is in an open Xcode project,"
     echo "otherwise it opens the file in Visual Studio Code."
@@ -17,10 +27,8 @@ if [ "$1" == "" ] || [ "$1" == "--help" ]; then
 fi
 
 file="$1"
-line=""
-column=""
 # Prefer a literal existing filename when its suffix looks like a position.
-if [[ ! -e "$file" ]]; then
+if [[ -z "$line" && ! -e "$file" ]]; then
     if [[ "$file" =~ ^(.+):([0-9]+):([0-9]+)$ ]]; then
         file="${BASH_REMATCH[1]}"
         line="${BASH_REMATCH[2]}"

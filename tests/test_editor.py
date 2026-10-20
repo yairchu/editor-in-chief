@@ -25,7 +25,7 @@ class EditorRoutingTests(unittest.TestCase):
             command.write_text(contents)
             command.chmod(0o755)
 
-    def check_route(self, projects, target, editor, exit_code=0, suffix="", expected_args=None, wait=False):
+    def check_route(self, projects, target, editor, exit_code=0, suffix="", expected_args=None, wait=False, prefix_args=()):
         project_paths = [self.root / project for project in projects]
         for project in project_paths:
             project.mkdir(parents=True, exist_ok=True)
@@ -39,7 +39,7 @@ class EditorRoutingTests(unittest.TestCase):
             TEST_EXIT=str(exit_code),
         )
         result = subprocess.run(
-            ["/bin/bash", str(SCRIPT), *(["--wait"] if wait else []), str(target_path) + suffix],
+            ["/bin/bash", str(SCRIPT), *(["--wait"] if wait else []), *prefix_args, str(target_path) + suffix],
             env=env, text=True, capture_output=True,
         )
         self.assertEqual(result.returncode, exit_code, result.stderr)
@@ -82,6 +82,26 @@ class EditorRoutingTests(unittest.TestCase):
         ]:
             with self.subTest(editor=editor):
                 self.check_route(projects, "App/main.cpp", editor, suffix=":12", expected_args=expected)
+
+    def test_plus_line_argument(self):
+        for editor, projects, prefix, expected in [
+            ("xed", ["App/App.xcodeproj"], "+91", ["--line", "91", "{path}"]),
+            ("xed", ["App/App.xcodeproj"], "+91:5", ["--line", "91", "{path}"]),
+            ("code", [], "+91", ["--goto", "{path}:91"]),
+            ("code", [], "+91:5", ["--goto", "{path}:91:5"]),
+        ]:
+            for wait in [False, True]:
+                with self.subTest(editor=editor, prefix=prefix, wait=wait):
+                    self.check_route(
+                        projects, "App/main.cpp", editor, prefix_args=[prefix],
+                        expected_args=expected, wait=wait,
+                    )
+
+    def test_plus_line_with_numeric_suffix_filename_is_literal(self):
+        self.check_route(
+            [], "App/name:42", "code", prefix_args=["+7"],
+            expected_args=["--goto", "{path}:7"],
+        )
 
     def test_colon_in_filename_with_position(self):
         self.check_route(
