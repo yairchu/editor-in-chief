@@ -16,7 +16,8 @@ class EditorRoutingTests(unittest.TestCase):
         self.bin = self.root / "bin"
         self.bin.mkdir()
         commands = {
-            "osascript": '#!/bin/bash\nprintf "%s\\n" "$TEST_PROJECTS"\n',
+            "pgrep": '#!/bin/bash\n[[ "$*" == "-x Xcode" ]] || exit 2\nexit "${TEST_XCODE_RUNNING:-0}"\n',
+            "osascript": '#!/bin/bash\ntouch "$TEST_QUERY_LOG"\nprintf "%s\\n" "$TEST_PROJECTS"\n',
             "xed": '#!/bin/bash\nprintf "xed\\n"; printf "%s\\n" "$@"; exit "${TEST_EXIT:-0}"\n',
             "code": '#!/bin/bash\nprintf "code\\n"; printf "%s\\n" "$@"; exit "${TEST_EXIT:-0}"\n',
         }
@@ -25,7 +26,7 @@ class EditorRoutingTests(unittest.TestCase):
             command.write_text(contents)
             command.chmod(0o755)
 
-    def check_route(self, projects, target, editor, exit_code=0, suffix="", expected_args=None, wait=False, prefix_args=()):
+    def check_route(self, projects, target, editor, exit_code=0, suffix="", expected_args=None, wait=False, prefix_args=(), xcode_running=True):
         project_paths = [self.root / project for project in projects]
         for project in project_paths:
             project.mkdir(parents=True, exist_ok=True)
@@ -37,12 +38,16 @@ class EditorRoutingTests(unittest.TestCase):
             PATH=str(self.bin) + os.pathsep + os.environ["PATH"],
             TEST_PROJECTS="\n".join(map(str, project_paths)),
             TEST_EXIT=str(exit_code),
+            TEST_XCODE_RUNNING="0" if xcode_running else "1",
+            TEST_QUERY_LOG=str(self.root / "xcode-query"),
         )
         result = subprocess.run(
             ["/bin/bash", str(SCRIPT), *(["--wait"] if wait else []), *prefix_args, str(target_path) + suffix],
             env=env, text=True, capture_output=True,
         )
         self.assertEqual(result.returncode, exit_code, result.stderr)
+        self.assertEqual((self.root / "xcode-query").exists(), xcode_running)
+        (self.root / "xcode-query").unlink(missing_ok=True)
         if expected_args is None:
             expected_args = [str(target_path.resolve())]
         else:
@@ -135,6 +140,17 @@ class EditorRoutingTests(unittest.TestCase):
 
     def test_no_projects(self):
         self.check_route([], "App/main.cpp", "code")
+
+    def test_xcode_not_running_skips_project_query(self):
+        self.check_route(
+            ["App/App.xcodeproj"], "App/main.cpp", "code", xcode_running=False,
+        )
+
+    def test_xcode_not_running_preserves_position_and_wait(self):
+        self.check_route(
+            [], "App/main.cpp", "code", xcode_running=False, wait=True,
+            suffix=":42:5", expected_args=["--goto", "{path}:42:5"],
+        )
 
     def test_project_paths_are_resolved_like_file_paths(self):
         (self.root / "Actual").mkdir()

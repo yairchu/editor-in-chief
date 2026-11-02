@@ -2,6 +2,7 @@
 
 Open files in Xcode when they belong to an open Xcode project, otherwise in
 Visual Studio Code. Recognizes CMake `build` and JUCE `Builds/MacOSX` layouts.
+When Xcode isn't running, files open directly in VS Code without launching Xcode.
 Requires macOS and the `xed`, `code`, and `realpath` commands. Check that they
 are available:
 

@@ -40,7 +40,10 @@ if [[ -z "$line" && ! -e "$file" ]]; then
 fi
 abs_file_path=$(realpath "$file") || exit 1
 
-open_xcode_projects=$( osascript -e '
+open_xcode_projects=""
+# Querying Xcode through AppleScript can launch it, so check its process first.
+if pgrep -x Xcode >/dev/null; then
+    open_xcode_projects=$( osascript -e '
 tell application "Xcode"
     set res to {}
     repeat with w in windows
@@ -52,6 +55,7 @@ tell application "Xcode"
     return res as text
 end tell
 ')
+fi
 
 while IFS= read -r proj_file; do
     [[ -n "$proj_file" ]] || continue
